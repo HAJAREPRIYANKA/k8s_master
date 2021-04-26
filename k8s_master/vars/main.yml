@@ -1,0 +1,21 @@
+---
+# vars file for k8s_master
+
+software:
+  - docker
+  - iproute-tc
+  - kubeadm
+  - kubectl
+  - kubelet
+
+service:
+  - docker
+  - kubelet
+
+# daemonfile for changing cgroup to dgroup in docker
+
+src: /root/k8s/daemon.json
+dest: /etc/docker/daemon.json
+
+
+

@@ -1,0 +1,75 @@
+---
+# tasks file for k8s_master
+
+- name: Configure kubernetes repo
+  yum_repository:
+     name: Kubernetes
+     description: "yum repo for kubernetes"
+     baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+     enabled: yes
+     gpgcheck: yes
+     repo_gpgcheck: yes
+     gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+- name: "to install kubeadm,kubectl and kubelet"
+  package:
+     name: "{{ item }}"
+     state: present
+  loop: "{{ software }}"
+
+- name: "starting and enabling docker and kubelet"
+  service:
+     name: "{{ item }}"
+     state: started
+     enabled: yes
+  loop: "{{ service}}"
+
+- name: "to pull the config images"
+  shell: kubeadm config images pull
+  register: kubeadm_img
+
+- name: display
+  debug:
+     var: kubeadm_img
+  ignore_errors: yes
+
+- name:
+  copy:
+       src: "{{ src }}"
+       dest: "{{ dest }}"
+
+- name: "to restart docker services after changing cgroup to dgroup"
+  service:
+     name: "docker"
+     state: restarted
+
+- name: "Setting bridge-nf-call-iptables to 1"
+  shell: |
+       echo "1"  > /proc/sys/net/bridge/bridge-nf-call-iptables
+  changed_when: false
+
+- name: Initialize the Kubernetes cluster using kubeadm
+  shell: "kubeadm init --pod-network-cidr=10.240.0.0/16 --ignore-preflight-errors=NumCPU --ignore-preflight-errors=Mem"
+  ignore_errors: yes
+
+- name: Setup kubeconfig for home user
+  shell: "{{ item }}"
+  with_items:
+          - "mkdir -p $HOME/.kube"
+          - "cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+          - "chown $(id -u):$(id -g) $HOME/.kube/config"
+
+- name: "installing addons (flannel)"
+  shell: "kubectl apply  -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
+
+- name: "To create  the token"
+  shell: "kubeadm token create --print-join-command"
+  register: tokens
+
+- name: printing
+  debug:
+     msg: "{{ tokens.stdout }}"
+
+- name: "register host with join command"
+  local_action: copy content="{{ tokens.stdout_lines[0] }}" dest="./join-command"
+
